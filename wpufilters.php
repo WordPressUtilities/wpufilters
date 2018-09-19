@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.1.0
+Version: 0.1.1
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.1.0';
+    private $plugin_version = '0.1.1';
     private $query_key = 'wpufilters_query';
     private $filters = array();
     private $filters_types = array(
@@ -267,8 +267,10 @@ class WPUFilters {
                 $html_filter .= '<li' . $classname . '><a rel="nofollow" href="' . $url . '">' . $value . '</a></li>';
             }
             $html .= '<div class="filter" data-filterid="' . $filter_id . '">' .
-                '<strong class="filter-name">' . $filter['public_name'] . '</strong>' .
-                '<ul>' . $html_filter . '</ul>' .
+                '<div class="filter-inner">' .
+                '<div class="filter-name-wrapper"><strong class="filter-name">' . $filter['public_name'] . '</strong></div>' .
+                '<ul class="filter-values">' . $html_filter . '</ul>' .
+                '</div>' .
                 '</div>';
         }
         if (empty($html)) {
@@ -286,7 +288,7 @@ class WPUFilters {
                     continue;
                 }
                 $url = $this->build_url_query_with_parameter($filter_id, $value_id);
-                $html .= '<li><a rel="nofollow" href="' . $url . '">' . $value . '</a></li>';
+                $html .= '<li><a rel="nofollow" href="' . $url . '"><span>' . $value . '</span></a></li>';
             }
         }
         if (empty($html)) {
