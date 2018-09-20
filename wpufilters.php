@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.1.1
+Version: 0.2.0
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.1.1';
+    private $plugin_version = '0.2.0';
     private $query_key = 'wpufilters_query';
     private $filters = array();
     private $filters_types = array(
@@ -69,6 +69,10 @@ class WPUFilters {
             /* Set multiple values */
             if (!isset($filter['multiple_values'])) {
                 $filter['multiple_values'] = true;
+            }
+            /* Set multiple values */
+            if (!isset($filter['operator'])) {
+                $filter['operator'] = 'IN';
             }
             /* Set correct values (used only for postmetas) */
             if (!isset($filter['values']) || !is_array($filters['values'])) {
@@ -173,18 +177,20 @@ class WPUFilters {
         $tax_query = array();
         $meta_query = array();
         foreach ($active_filters as $filter_id => $filter_values) {
-            if ($this->filters[$filter_id]['type'] == 'postmeta') {
+            $current_filter = $this->filters[$filter_id];
+            if ($current_filter['type'] == 'postmeta') {
                 $meta_query[] = array(
                     'key' => $filter_id,
                     'value' => $filter_values,
-                    'compare' => 'IN'
+                    'compare' => $current_filter['operator']
                 );
             }
-            if ($this->filters[$filter_id]['type'] == 'tax') {
+            if ($current_filter['type'] == 'tax') {
                 $tax_query[] = array(
                     'taxonomy' => $filter_id,
                     'field' => 'slug',
-                    'terms' => $filter_values
+                    'terms' => $filter_values,
+                    'operator' => $current_filter['operator']
                 );
             }
         }
@@ -197,7 +203,6 @@ class WPUFilters {
         if (!empty($meta_query)) {
             $query->query_vars['meta_query'] = $meta_query;
         }
-
     }
 
     /* ----------------------------------------------------------
@@ -264,7 +269,7 @@ class WPUFilters {
                 if ($this->is_filter_active($filter_id, $value_id)) {
                     $classname = ' class="active"';
                 }
-                $html_filter .= '<li' . $classname . '><a rel="nofollow" href="' . $url . '">' . $value . '</a></li>';
+                $html_filter .= '<li' . $classname . '><a rel="nofollow" href="' . $url . '"><span>' . $value . '</span></a></li>';
             }
             $html .= '<div class="filter" data-filterid="' . $filter_id . '">' .
                 '<div class="filter-inner">' .
@@ -282,20 +287,26 @@ class WPUFilters {
     public function get_html_filters_active() {
         $html = '';
 
+        /* Template for active filter */
+        $tpl_active_filter = apply_filters('wpufilters_tpl_active_filter', '<a rel="nofollow" href="%s"><span class="name">%s :</span> <strong class="value">%s</strong></a>');
+
         foreach ($this->filters as $filter_id => $filter) {
             foreach ($filter['values'] as $value_id => $value) {
                 if (!$this->is_filter_active($filter_id, $value_id)) {
                     continue;
                 }
                 $url = $this->build_url_query_with_parameter($filter_id, $value_id);
-                $html .= '<li><a rel="nofollow" href="' . $url . '"><span>' . $value . '</span></a></li>';
+                $html .= '<li>' . sprintf($tpl_active_filter, $url, $filter['name'], $value) . '</li>';
             }
         }
         if (empty($html)) {
             return '';
         }
 
-        return '<div class="wpu-filters-active__wrapper"><div class="wpu-filters-active"><ul>' . $html . '</ul></div></div>';
+        $before_list_filter = apply_filters('wpufilters_tpl_before_list_active_filters', '');
+        $after_list_filter = apply_filters('wpufilters_tpl_after_list_active_filters', '');
+
+        return '<div class="wpu-filters-active__wrapper"><div class="wpu-filters-active">' . $before_list_filter . '<ul class="wpu-filters-active__list">' . $html . '</ul>' . $after_list_filter . '</div></div>';
 
     }
 }
