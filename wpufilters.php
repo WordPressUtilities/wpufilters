@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.2.0
+Version: 0.3.0
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,8 +12,9 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.2.0';
+    private $plugin_version = '0.3.0';
     private $query_key = 'wpufilters_query';
+    private $search_parameter = 'search';
     private $filters = array();
     private $filters_types = array(
         'postmeta',
@@ -33,6 +34,7 @@ class WPUFilters {
     public function init() {
         /* Setup filters */
         $this->filters = $this->set_filters(apply_filters('wpufilters_filters', array()));
+        $this->search_parameter = apply_filters('wpufilters_search_parameter', $this->search_parameter);
 
         /* Hooks */
         add_action('pre_get_posts', array(&$this, 'setup_post_query'));
@@ -170,6 +172,9 @@ class WPUFilters {
         if (!$query->is_main_query()) {
             return;
         }
+        if (isset($_GET[$this->search_parameter])) {
+            $query->query_vars['s'] = $_GET[$this->search_parameter];
+        }
         $active_filters = $this->get_active_filters();
         if (empty($active_filters)) {
             return;
@@ -217,13 +222,39 @@ class WPUFilters {
      */
     private function build_url_query_with_parameter($filter_id = '', $value_id = '') {
         $filters_query = $this->update_filter_query($filter_id, $value_id);
+
         /* On current post type */
         $url_with_query = get_post_type_archive_link(get_post_type());
+
+        /* Search parameter */
+        if (isset($_GET[$this->search_parameter])) {
+            $url_with_query = $this->add_parameter_to_url($url_with_query, $this->search_parameter, urlencode($_GET[$this->search_parameter]));
+        }
+
         /* Add current query */
         if (!empty($filters_query)) {
-            $url_with_query .= '?' . $this->query_key . '=' . urlencode(json_encode($filters_query));
+            $url_with_query = $this->add_parameter_to_url($url_with_query, $this->query_key, urlencode(json_encode($filters_query)));
         }
+
         return $url_with_query;
+    }
+
+    public function add_parameter_to_url($url = '', $parameter = '', $value = '') {
+
+        if (empty($parameter)) {
+            return $url;
+        }
+
+        /* Add parameter */
+        $url .= (parse_url($url, PHP_URL_QUERY) ? '&' : '?');
+        $url .= $parameter;
+
+        /* Add value if needed */
+        if (!empty($value)) {
+            $url .= '=' . $value;
+        }
+
+        return $url;
     }
 
     /**
