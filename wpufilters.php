@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.3.0
+Version: 0.3.1
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.3.0';
+    private $plugin_version = '0.3.1';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
     private $filters = array();
@@ -215,16 +215,30 @@ class WPUFilters {
     ---------------------------------------------------------- */
 
     /**
+     * Get current post type
+     * @return string current post type
+     */
+    public function get_post_type() {
+        global $wp_query;
+        $post_type = get_post_type();
+        if (!$post_type && is_object($wp_query) && is_array($wp_query->query) && isset($wp_query->query['post_type'])) {
+            return $wp_query->query['post_type'];
+        }
+        return $post_type;
+    }
+
+    /**
      * Build an URL with a changed filter
      * @param  string $filter_id    Selected filter
      * @param  string $filter_value Desired value
      * @return string               Filtered URL
      */
     private function build_url_query_with_parameter($filter_id = '', $value_id = '') {
+
         $filters_query = $this->update_filter_query($filter_id, $value_id);
 
         /* On current post type */
-        $url_with_query = get_post_type_archive_link(get_post_type());
+        $url_with_query = get_post_type_archive_link($this->get_post_type());
 
         /* Search parameter */
         if (isset($_GET[$this->search_parameter])) {
