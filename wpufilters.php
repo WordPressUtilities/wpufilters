@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.3.1
+Version: 0.4.0
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.3.1';
+    private $plugin_version = '0.4.0';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
     private $filters = array();
@@ -299,6 +299,27 @@ class WPUFilters {
     /* ----------------------------------------------------------
       Display
     ---------------------------------------------------------- */
+
+    /**
+     * Display a search form compatible with the filters
+     * @return string HTML Content to be displayed
+     */
+    public function get_html_search_form() {
+        $html = '';
+
+        $template_form = '<form role="search" method="get" class="search-form" action="">
+            <input type="hidden" name="' . $this->query_key . '" value="' . esc_attr(json_encode($this->get_active_filters())) . '" />
+            <label>
+                <span class="screen-reader-text">' . _x('Search for:', 'label') . '</span>
+                <input type="search" class="search-field" placeholder="' . esc_attr_x('Search &hellip;', 'placeholder') . '" value="' . get_search_query() . '" name="%s" />
+            </label>
+            <input type="submit" class="search-submit" value="' . esc_attr_x('Search', 'submit button') . '" />
+        </form>';
+
+        $html = apply_filters('wpufilters_tpl_search_form', $template_form);
+        $html = sprintf($html, $this->search_parameter);
+        return $html;
+    }
 
     /**
      * Display a list of filters
