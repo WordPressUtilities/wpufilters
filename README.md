@@ -14,18 +14,16 @@ add_filter('wpufilters_filters', 'wputh__wpufilters_filters', 10, 1);
 function wputh__wpufilters_filters($filters = array()) {
 
     /* Taxonomies */
-    $filters =  array(
-        'projet' => array(
-            'name' => 'Projet',
-            'type' => 'tax'
-        ),
-        'difficulte' => array(
-            'name' => 'Difficulté',
-            'type' => 'tax'
-        )
+    $filters['projet'] = array(
+        'name' => 'Projet',
+        'type' => 'tax'
+    );
+    $filters['difficulte'] = array(
+        'name' => 'Difficulté',
+        'type' => 'tax'
     );
 
-    /* Postmetas */
+    /* Post metas */
     $filters['meta_key_checkbox'] = array(
         'multiple_values' => false,
         'name' => 'Ma Meta'
@@ -48,6 +46,8 @@ function wputh__wpufilters_filters($filters = array()) {
 
 ```php
 if (is_object($WPUFilters)) {
+    /* Search form */
+    echo $WPUFilters->get_html_search_form();
     /* All filters */
     echo $WPUFilters->get_html_filters();
     /* Current filters */

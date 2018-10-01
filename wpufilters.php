@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.4.0
+Version: 0.4.1
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.4.0';
+    private $plugin_version = '0.4.1';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
     private $filters = array();
@@ -220,7 +220,7 @@ class WPUFilters {
      */
     public function get_post_type() {
         global $wp_query;
-        $post_type = get_post_type();
+        $post_type = apply_filters('wpufilters__post_type', get_post_type());
         if (!$post_type && is_object($wp_query) && is_array($wp_query->query) && isset($wp_query->query['post_type'])) {
             return $wp_query->query['post_type'];
         }
