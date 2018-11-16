@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.4.1
+Version: 0.5.0
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,9 +12,12 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.4.1';
+    private $plugin_version = '0.5.0';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
+    private $table_index = 'wpufilters_index';
+    private $filled_filters = array();
+    private $post_type = false;
     private $filters = array();
     private $filters_types = array(
         'postmeta',
@@ -22,22 +25,24 @@ class WPUFilters {
     );
 
     public function __construct() {
-        if (is_admin()) {
-            return;
-        }
-        add_filter('init', array(&$this, 'init'), 50);
+        add_filter('plugins_loaded', array(&$this, 'plugins_loaded'), 50);
     }
 
     /**
-     * Init filters
+     * plugins_loaded filters
      */
-    public function init() {
+    public function plugins_loaded() {
+
         /* Setup filters */
         $this->filters = $this->set_filters(apply_filters('wpufilters_filters', array()));
+        $this->post_type = apply_filters('wpufilters__post_type', $this->post_type);
         $this->search_parameter = apply_filters('wpufilters_search_parameter', $this->search_parameter);
 
         /* Hooks */
-        add_action('pre_get_posts', array(&$this, 'setup_post_query'));
+        if (!is_admin()) {
+            add_action('pre_get_posts', array(&$this, 'setup_post_query'));
+            add_action('wp', array(&$this, 'setup_active_filters'));
+        }
 
         /* Auto update */
         include dirname(__FILE__) . '/inc/WPUBaseUpdate/WPUBaseUpdate.php';
@@ -45,6 +50,9 @@ class WPUFilters {
             'WordPressUtilities',
             'wpufilters',
             $this->plugin_version);
+
+        /* Indexation */
+        $this->setup_indexation();
     }
 
     /**
@@ -76,8 +84,7 @@ class WPUFilters {
             if (!isset($filter['operator'])) {
                 $filter['operator'] = 'IN';
             }
-            /* Set correct values (used only for postmetas) */
-            if (!isset($filter['values']) || !is_array($filters['values'])) {
+            if (!isset($filter['values']) || !is_array($filter['values'])) {
                 $filter['values'] = array();
                 if ($filter['type'] == 'postmeta') {
                     $filter['values'] = array(__('No'), __('Yes'));
@@ -210,6 +217,36 @@ class WPUFilters {
         }
     }
 
+    public function setup_active_filters() {
+        if (!isset($_GET[$this->query_key])) {
+            return;
+        }
+
+        global $wpdb;
+        $key = 0;
+        /* Get current query */
+        $qwhere = array();
+        foreach ($this->filters as $filter_id => $filter) {
+            foreach ($filter['values'] as $value_id => $value) {
+                if (!$this->is_filter_active($filter_id, $value_id)) {
+                    continue;
+                }
+                $qwhere[] = '(idx_key=' . $key . ' AND idx_value="' . esc_sql($value_id) . '")';
+            }
+            $key++;
+        }
+
+        /* Get post ids with current query */
+        $ids_posts = "SELECT DISTINCT post_id FROM " . $this->table_index . " WHERE " . implode(' OR ', $qwhere);
+        $active_values = "SELECT  DISTINCT  idx_key,idx_value FROM " . $this->table_index . " WHERE post_id IN(" . $ids_posts . ")";
+        $filled_filters = $wpdb->get_results($active_values, ARRAY_N);
+        $filters_keys = array_keys($this->filters);
+        foreach ($filled_filters as $key => $filter) {
+            $this->filled_filters[$key] = $filter;
+            $this->filled_filters[$key][0] = $filters_keys[$filter[0]];
+        }
+    }
+
     /* ----------------------------------------------------------
       Helpers
     ---------------------------------------------------------- */
@@ -220,11 +257,10 @@ class WPUFilters {
      */
     public function get_post_type() {
         global $wp_query;
-        $post_type = apply_filters('wpufilters__post_type', get_post_type());
-        if (!$post_type && is_object($wp_query) && is_array($wp_query->query) && isset($wp_query->query['post_type'])) {
+        if (!$this->post_type && is_object($wp_query) && is_array($wp_query->query) && isset($wp_query->query['post_type'])) {
             return $wp_query->query['post_type'];
         }
-        return $post_type;
+        return $this->post_type;
     }
 
     /**
@@ -297,6 +333,126 @@ class WPUFilters {
     }
 
     /* ----------------------------------------------------------
+      Indexation
+    ---------------------------------------------------------- */
+
+    public function setup_indexation() {
+        /* Dont setup indexation for dynamic filters because too greedy */
+        if (!$this->post_type) {
+            return false;
+        }
+        /* Create DB */
+        $table_fields = array(
+            'post_id' => array(
+                'public_name' => 'Post ID',
+                'sql' => 'MEDIUMINT UNSIGNED'
+            ),
+            'idx_key' => array(
+                'public_name' => 'Key',
+                'sql' => 'MEDIUMINT UNSIGNED'
+            ),
+            'idx_value' => array(
+                'public_name' => 'Value',
+                'sql' => 'TEXT'
+            )
+        );
+        include dirname(__FILE__) . '/inc/WPUBaseAdminDatas/WPUBaseAdminDatas.php';
+        $this->baseadmindatas = new \wpufilters\WPUBaseAdminDatas();
+        $this->baseadmindatas->init(array(
+            'handle_database' => false,
+            'plugin_id' => 'wpufilters',
+            'table_name' => $this->table_index,
+            'table_fields' => $table_fields
+        ));
+
+        global $wpdb;
+        $this->table_index = $wpdb->prefix . $this->table_index;
+        /* Hooks */
+
+        /* - Index at post save */
+        add_action('save_post', array(&$this, 'save_post'));
+
+    }
+
+    public function save_post($post_id) {
+        if (wp_is_post_revision($post_id)) {
+            return;
+        }
+
+        $this->index_post($post_id);
+    }
+
+    public function index_post($post_id) {
+        global $wpdb;
+
+        /* Index post values*/
+        $key = 0;
+        $values = array();
+        foreach ($this->filters as $filter_id => $filter) {
+            if ($filter['type'] == 'tax') {
+                $terms = wp_get_post_terms($post_id, $filter_id);
+                if (is_array($terms)) {
+                    foreach ($terms as $term) {
+                        $values[] = array($key, $term->slug);
+                    }
+                }
+            } else {
+                $meta_value = get_post_meta($post_id, $filter_id, 1);
+                if ($meta_value) {
+                    $values[] = array($key, $meta_value);
+                }
+            }
+            $key++;
+        }
+
+        /* Clean everything from database for this post */
+        $wpdb->delete($this->table_index, array('post_id' => $post_id), array('%d'));
+
+        /* Insert new values */
+        foreach ($values as $value) {
+            $wpdb->insert(
+                $this->table_index,
+                array(
+                    'post_id' => $post_id,
+                    'idx_key' => $value[0],
+                    'idx_value' => $value[1]
+                ),
+                array(
+                    '%d',
+                    '%d',
+                    '%s'
+                )
+            );
+        }
+    }
+
+    public function filter_has_results_current_query($filter_id) {
+        /* no results for a specific search */
+        if (empty($this->filled_filters)) {
+            return !isset($_GET[$this->query_key]);
+        }
+        foreach ($this->filled_filters as $filled_filter) {
+            if ($filled_filter[0] == $filter_id) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function filter_var_has_results_current_query($filter_id, $value_id) {
+        /* no results for a specific search */
+        if (empty($this->filled_filters)) {
+            return !isset($_GET[$this->query_key]);
+        }
+        foreach ($this->filled_filters as $filled_filter) {
+            if ($filled_filter[0] == $filter_id && $filled_filter[1] == $value_id) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /* ----------------------------------------------------------
       Display
     ---------------------------------------------------------- */
 
@@ -329,7 +485,17 @@ class WPUFilters {
         $html = '';
         foreach ($this->filters as $filter_id => $filter) {
             $html_filter = '';
+
+            /* Check if this filter has results with the current query */
+            if (!$this->filter_has_results_current_query($filter_id)) {
+                continue;
+            }
+
             foreach ($filter['values'] as $value_id => $value) {
+                /* Check if there is a result for this var */
+                if (!$this->filter_var_has_results_current_query($filter_id, $value_id)) {
+                    continue;
+                }
                 $url = $this->build_url_query_with_parameter($filter_id, $value_id);
                 $classname = '';
                 if ($this->is_filter_active($filter_id, $value_id)) {

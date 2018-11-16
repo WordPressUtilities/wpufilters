@@ -54,3 +54,14 @@ if (is_object($WPUFilters)) {
     echo $WPUFilters->get_html_filters_active();
 }
 ```
+
+
+### Roadmap
+
+- [ ] Clean index at post deletion
+- [ ] Delete index on filters changes
+- [ ] Page reindex
+- [ ] Action WP CLI ?
+- [ ] Do not recreate unchanged values when reindexing post
+- [ ] Coherent results option.
+- [ ] Preview result counter.
