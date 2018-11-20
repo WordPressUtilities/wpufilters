@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.5.0
+Version: 0.5.1
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.5.0';
+    private $plugin_version = '0.5.1';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
     private $table_index = 'wpufilters_index';
@@ -236,6 +236,10 @@ class WPUFilters {
             $key++;
         }
 
+        if (empty($qwhere)) {
+            return;
+        }
+
         /* Get post ids with current query */
         $ids_posts = "SELECT DISTINCT post_id FROM " . $this->table_index . " WHERE " . implode(' OR ', $qwhere);
         $active_values = "SELECT  DISTINCT  idx_key,idx_value FROM " . $this->table_index . " WHERE post_id IN(" . $ids_posts . ")";
@@ -429,7 +433,7 @@ class WPUFilters {
     public function filter_has_results_current_query($filter_id) {
         /* no results for a specific search */
         if (empty($this->filled_filters)) {
-            return !isset($_GET[$this->query_key]);
+            return (!isset($_GET[$this->query_key]) || $_GET[$this->query_key] == '[]');
         }
         foreach ($this->filled_filters as $filled_filter) {
             if ($filled_filter[0] == $filter_id) {
@@ -442,7 +446,7 @@ class WPUFilters {
     public function filter_var_has_results_current_query($filter_id, $value_id) {
         /* no results for a specific search */
         if (empty($this->filled_filters)) {
-            return !isset($_GET[$this->query_key]);
+            return (!isset($_GET[$this->query_key]) || $_GET[$this->query_key] == '[]');
         }
         foreach ($this->filled_filters as $filled_filter) {
             if ($filled_filter[0] == $filter_id && $filled_filter[1] == $value_id) {
