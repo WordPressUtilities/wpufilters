@@ -58,7 +58,7 @@ if (is_object($WPUFilters)) {
 
 ### Roadmap
 
-- [ ] Clean index at post deletion
+- [x] Clean index at post deletion
 - [ ] Delete index on filters changes
 - [ ] Page reindex
 - [ ] Action WP CLI ?

@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.5.1
+Version: 0.5.2
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.5.1';
+    private $plugin_version = '0.5.2';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
     private $table_index = 'wpufilters_index';
@@ -376,6 +376,9 @@ class WPUFilters {
         /* - Index at post save */
         add_action('save_post', array(&$this, 'save_post'));
 
+        /* - Clean at post deletion */
+        add_action('delete_post', array(&$this, 'delete_post'));
+
     }
 
     public function save_post($post_id) {
@@ -384,6 +387,15 @@ class WPUFilters {
         }
 
         $this->index_post($post_id);
+    }
+
+    public function delete_post($post_id) {
+        $this->deindex_post($post_id);
+    }
+
+    public function deindex_post($post_id) {
+        global $wpdb;
+        $wpdb->delete($this->table_index, array('post_id' => $post_id), array('%d'));
     }
 
     public function index_post($post_id) {
@@ -410,7 +422,7 @@ class WPUFilters {
         }
 
         /* Clean everything from database for this post */
-        $wpdb->delete($this->table_index, array('post_id' => $post_id), array('%d'));
+        $this->deindex_post($post_id);
 
         /* Insert new values */
         foreach ($values as $value) {
@@ -545,6 +557,17 @@ class WPUFilters {
         return '<div class="wpu-filters-active__wrapper"><div class="wpu-filters-active">' . $before_list_filter . '<ul class="wpu-filters-active__list">' . $html . '</ul>' . $after_list_filter . '</div></div>';
 
     }
+
+    public function uninstall() {
+        global $wpdb;
+        $wpdb->query("DROP TABLE IF EXISTS " . $this->table_index);
+    }
 }
 
 $WPUFilters = new WPUFilters();
+
+register_deactivation_hook(__FILE__, 'wpufilters_deactivation_hook');
+function wpufilters_deactivation_hook() {
+    global $WPUFilters;
+    $WPUFilters->uninstall();
+}
