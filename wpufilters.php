@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.5.3
+Version: 0.5.4
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.5.3';
+    private $plugin_version = '0.5.4';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
     private $table_index = 'wpufilters_index';
@@ -378,7 +378,18 @@ class WPUFilters {
 
         /* - Clean at post deletion */
         add_action('delete_post', array(&$this, 'delete_post'));
+    }
 
+    public function reindexall_posts() {
+        set_time_limit(0);
+        $ids = get_posts(array(
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'post_type' => $this->post_type
+        ));
+        foreach($ids as $post_id){
+            $this->index_post($post_id);
+        }
     }
 
     public function save_post($post_id) {
@@ -559,7 +570,7 @@ class WPUFilters {
     }
 
     public function uninstall() {
-        if(is_object($this->baseadmindatas)){
+        if (is_object($this->baseadmindatas)) {
             $this->baseadmindatas->drop_database();
         }
     }
