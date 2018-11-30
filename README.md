@@ -59,8 +59,10 @@ if (is_object($WPUFilters)) {
 ### Roadmap
 
 - [x] Clean index at post deletion
+- [x] Page reindex
+- [ ] French translation
 - [ ] Delete index on filters changes
-- [ ] Page reindex
+- [ ] Select instead of radiobox
 - [ ] Action WP CLI ?
 - [ ] Do not recreate unchanged values when reindexing post
 - [ ] Coherent results option.

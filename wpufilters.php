@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.5.4
+Version: 0.6.0
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.5.4';
+    private $plugin_version = '0.6.0';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
     private $table_index = 'wpufilters_index';
@@ -369,8 +369,35 @@ class WPUFilters {
             'table_fields' => $table_fields
         ));
 
+        # Admin page
+        include dirname(__FILE__) . '/inc/WPUBaseAdminPage/WPUBaseAdminPage.php';
+        $admin_pages = array(
+            'main' => array(
+                'section' => 'options-general.php',
+                'menu_name' => 'Filters',
+                'name' => 'Filters',
+                'settings_link' => true,
+                'settings_name' => 'Settings',
+                'function_content' => array(&$this,
+                    'page_content__main'
+                ),
+                'function_action' => array(&$this,
+                    'page_action__main'
+                )
+            )
+        );
+
+        $this->adminpages = new \wpufilters\WPUBaseAdminPage();
+        $this->adminpages->init(array(
+            'id' => 'wpufilters',
+            'level' => 'manage_options',
+            'basename' => plugin_basename(__FILE__)
+        ), $admin_pages);
+
+        # Index
         global $wpdb;
         $this->table_index = $wpdb->prefix . $this->table_index;
+
         /* Hooks */
 
         /* - Index at post save */
@@ -387,7 +414,7 @@ class WPUFilters {
             'fields' => 'ids',
             'post_type' => $this->post_type
         ));
-        foreach($ids as $post_id){
+        foreach ($ids as $post_id) {
             $this->index_post($post_id);
         }
     }
@@ -568,6 +595,49 @@ class WPUFilters {
         return '<div class="wpu-filters-active__wrapper"><div class="wpu-filters-active">' . $before_list_filter . '<ul class="wpu-filters-active__list">' . $html . '</ul>' . $after_list_filter . '</div></div>';
 
     }
+
+    /* ----------------------------------------------------------
+      Admin
+    ---------------------------------------------------------- */
+
+    public function page_content__main() {
+        echo sprintf(__('<strong>Index status:</strong> %s/%s posts.'), $this->get_nb_indexed_posts(), $this->get_nb_posts());
+        echo '<hr />';
+        submit_button(__('Reindex all'), 'button', 'filter_action', true);
+    }
+
+    /* Get indexed posts */
+    public function get_nb_indexed_posts() {
+        global $wpdb;
+        $query = "SELECT COUNT(DISTINCT post_id) as nb_posts FROM " . $this->table_index;
+        $nb = $wpdb->get_var($query);
+        return is_numeric($nb) ? $nb : 0;
+    }
+
+    /* Get all posts */
+    public function get_nb_posts() {
+        $posts = get_posts(array(
+            'fields' => 'ids',
+            'post_type' => $this->post_type,
+            'posts_per_page' => -1
+        ));
+        $nb_posts = count($posts);
+        unset($posts);
+        return is_numeric($nb_posts) ? $nb_posts : 0;
+    }
+
+    /* Actions
+    -------------------------- */
+
+    public function page_action__main() {
+        if (isset($_POST['filter_action'])) {
+            $this->reindexall_posts();
+        }
+    }
+
+    /* ----------------------------------------------------------
+      Install
+    ---------------------------------------------------------- */
 
     public function uninstall() {
         if (is_object($this->baseadmindatas)) {
