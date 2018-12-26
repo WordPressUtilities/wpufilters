@@ -5,7 +5,7 @@ namespace wpufilters;
 /*
 Class Name: WPU Base Admin Datas
 Description: A class to handle datas in WordPress admin
-Version: 2.6.3
+Version: 2.8.0
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -16,9 +16,9 @@ class WPUBaseAdminDatas {
 
     public $default_perpage = 20;
     public $sql_option_name = false;
+    public $pagename;
 
-    public function __construct() {
-    }
+    public function __construct() {}
 
     public function init($settings = array()) {
         $this->apply_settings($settings);
@@ -31,6 +31,7 @@ class WPUBaseAdminDatas {
     public function apply_settings($settings) {
         $default_settings = array(
             'plugin_id' => 'my_plugin',
+            'admin_url' => 'admin.php',
             'table_name' => 'my_table',
             'table_fields' => array(
                 'value_1' => array(
@@ -75,6 +76,7 @@ class WPUBaseAdminDatas {
 
         $this->settings = $settings;
 
+        $this->pagename = admin_url($this->settings['admin_url'] . '?page=' . $this->settings['plugin_id']);
         $this->sql_option_name = $this->settings['plugin_id'] . '_' . $this->settings['table_name'] . '_version';
     }
 
@@ -193,7 +195,7 @@ class WPUBaseAdminDatas {
             }
         }
         if (isset($_POST['page'])) {
-            wp_redirect(admin_url('admin.php?page=' . esc_attr($_POST['page'])));
+            wp_redirect($this->pagename);
             die;
         }
     }
@@ -258,13 +260,15 @@ class WPUBaseAdminDatas {
             'id' => 'ID'
         );
         $base_columns = array();
-        foreach ($this->settings['table_fields'] as $id => $field) {
-            if (!isset($args['primary_column'])) {
-                $args['primary_column'] = $id;
+        if (isset($args['columns']) && is_array($args['columns'])) {
+            foreach ($args['columns'] as $id => $field) {
+                if (!isset($args['primary_column'])) {
+                    $args['primary_column'] = $id;
+                }
+                $base_columns[$id] = $field;
             }
-            $base_columns[$id] = $field['public_name'];
         }
-        $base_columns = $base_columns + $default_columns;
+        $base_columns = array_merge($base_columns, $default_columns);
 
         // Default columns
         if (!isset($args['columns'])) {
@@ -286,7 +290,7 @@ class WPUBaseAdminDatas {
 
         // Order results
         if (!isset($args['order'])) {
-            $args['order'] = isset($_GET['order']) && in_array($_GET['order'], array('asc', 'desc')) ? $_GET['order'] : 'asc';
+            $args['order'] = isset($_GET['order']) && in_array($_GET['order'], array('asc', 'desc')) ? $_GET['order'] : 'desc';
         }
 
         if (!isset($args['orderby'])) {
@@ -318,9 +322,15 @@ class WPUBaseAdminDatas {
                 $args['max_elements'] = $pager['max_elements'];
             }
         }
+
         // Default list
+        $total_nb = 0;
         if (empty($values) || !is_array($values)) {
-            $values = $wpdb->get_results("SELECT " . implode(", ", array_keys($args['columns'])) . " FROM " . $tablename . " " . $sql_where . " " . $sql_order . " " . $args['limit']);
+            $columns = array_keys($args['columns']);
+            $query = "SELECT " . implode(", ", $columns) . " FROM " . $tablename . " " . $sql_where . " " . $sql_order . " " . $args['limit'];
+            $query_total = "SELECT count(" . $columns[0] . ")  FROM " . $tablename . " " . $sql_where;
+            $values = $wpdb->get_results($query);
+            $total_nb = $wpdb->get_var($query_total);
         }
 
         $screen = get_current_screen();
@@ -329,14 +339,16 @@ class WPUBaseAdminDatas {
             $page_id = $screen->parent_base;
         }
 
-        $url_items = array(
+        $url_items_clear = array(
             'order' => $args['order'],
             'orderby' => $args['orderby'],
-            'pagenum' => '%#%',
-            'where_glue' => $where_glue,
-            'where_text' => $where_text,
             'page' => $page_id
         );
+        $url_items = $url_items_clear;
+        $url_items['pagenum'] = '%#%';
+        $url_items['where_glue'] = $where_glue;
+        $url_items['where_text'] = $where_text;
+
         $page_links = paginate_links(array(
             'base' => add_query_arg($url_items),
             'format' => '',
@@ -346,23 +358,29 @@ class WPUBaseAdminDatas {
             'current' => $args['pagenum']
         ));
 
-        if ($page_links) {
-            $start_element = ($args['pagenum'] - 1) * $args['perpage'] + 1;
-            $end_element = min($args['pagenum'] * $args['perpage'], $args['max_elements']);
-            $pagination = '<div style="margin:1em 0" class="tablenav">';
-            $pagination .= '<div class="alignleft">' . sprintf(__('Items %s - %s', $this->settings['plugin_id']), $start_element, $end_element) . '</div>';
-            $pagination .= '<div class="tablenav-pages alignright actions bulkactions">' . $page_links . '</div>';
-            $pagination .= '<br class="clear" /></div>';
+        $start_element = ($args['pagenum'] - 1) * $args['perpage'] + 1;
+        $end_element = min($args['pagenum'] * $args['perpage'], $args['max_elements']);
+        $pagination = '<div style="margin:1em 0" class="tablenav">';
+        $pagination .= '<div class="alignleft">';
+        $pagination .= sprintf(__('Items %s - %s', $this->settings['plugin_id']), $start_element, $end_element);
+        if ($total_nb) {
+            $pagination .= ' / ' . $total_nb;
         }
+        $pagination .= '</div>';
+        if ($page_links) {
+            $pagination .= '<div class="tablenav-pages alignright actions bulkactions">' . $page_links . '</div>';
+        }
+        $pagination .= '<br class="clear" /></div>';
 
-        $search_form = '<form class="admindatas-search-form" action="' . admin_url("admin.php") . '" method="get"><p class="search-box">';
+        $search_form = '<form class="admindatas-search-form" action="' . $this->pagename . '" method="get"><p class="search-box">';
         $search_form .= '<input type="hidden" name="page" value="' . esc_attr($page_id) . '" />';
         $search_form .= '<input type="hidden" name="order" value="' . esc_attr($args['order']) . '" />';
         $search_form .= '<input type="hidden" name="orderby" value="' . esc_attr($args['orderby']) . '" />';
         $search_form .= '<input type="search" name="where_text" value="' . esc_attr($where_text) . '" />';
-        ob_start();
-        submit_button(__('Search'), '', 'submit', false);
-        $search_form .= ob_get_clean();
+        $search_form .= get_submit_button(__('Search'), '', 'submit', false);
+        if ($where_text) {
+            $search_form .= '<br /><small><a href="' . add_query_arg($url_items_clear, $this->pagename) . '">' . __('Clear') . '</a></small>';
+        }
         $search_form .= '</p><br class="clear" /></form><div class="clear"></div>';
 
         $has_id = is_object($values[0]) && isset($values[0]->id);
@@ -372,7 +390,7 @@ class WPUBaseAdminDatas {
         $content .= '<input type="hidden" name="page" value="' . esc_attr($page_id) . '" />';
         $content .= wp_nonce_field('action-main-form-' . $page_id, 'action-main-form-admin-datas-' . $page_id, true, false);
 
-        $content .= '<table class="wp-list-table widefat fixed striped">';
+        $content .= '<table class="wp-list-table widefat striped">';
         if (isset($args['columns']) && is_array($args['columns']) && !empty($args['columns'])) {
             $labels = '<tr>';
             if ($has_id) {
@@ -398,7 +416,12 @@ class WPUBaseAdminDatas {
             }
             foreach ($vals as $cell_id => $val) {
                 $val = (empty($val) ? '&nbsp;' : $val);
-                $content .= '<td class="' . ($cell_id == $args['primary_column'] ? 'column-primary' : '') . '">' . apply_filters('wpubaseadmindatas_cellcontent', $val, $cell_id, $this->settings) . '</td>';
+                $content .= '<td data-colname="' . esc_attr($args['columns'][$cell_id]) . '" class="' . ($cell_id == $args['primary_column'] ? 'column-primary' : '') . '">';
+                $content .= apply_filters('wpubaseadmindatas_cellcontent', $val, $cell_id, $this->settings);
+                if($cell_id == $args['primary_column']){
+                    $content .= '<button type="button" class="toggle-row"><span class="screen-reader-text">' . __( 'Show more details' ) . '</span></button>';
+                }
+                $content .= '</td>';
             }
             $content .= '</tr>';
         }

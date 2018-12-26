@@ -4,7 +4,7 @@ namespace wpufilters;
 /*
 Class Name: WPU Base Update
 Description: A class to handle plugin update from github
-Version: 0.2.0
+Version: 0.3.1
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -21,8 +21,9 @@ class WPUBaseUpdate {
     private $transient_expiration;
     private $plugin_id;
     private $plugin_dir;
+    private $details;
 
-    public function __construct($github_username = false, $github_project = false, $current_version = false) {
+    public function __construct($github_username = false, $github_project = false, $current_version = false, $details = array()) {
         if (!$github_username || !$github_project || !$current_version) {
             return;
         }
@@ -36,6 +37,22 @@ class WPUBaseUpdate {
         $this->transient_expiration = HOUR_IN_SECONDS;
         $this->plugin_id = $this->github_project . '/' . $this->github_project . '.php';
         $this->plugin_dir = (defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : WP_CONTENT_DIR . '/plugins') . '/' . $this->plugin_id;
+
+        $gitpath = dirname($this->plugin_dir) . '/.git';
+        if (is_dir($gitpath) || file_exists($gitpath)) {
+            return;
+        }
+
+        if (!is_array($details)) {
+            $details = array();
+        }
+        if (!isset($details['tested'])) {
+            $details['tested'] = false;
+        }
+        if (!isset($details['requires'])) {
+            $details['requires'] = false;
+        }
+        $this->details = $details;
 
         /* Hook on plugin update */
         add_filter('site_transient_update_plugins', array($this,
@@ -76,9 +93,14 @@ class WPUBaseUpdate {
         $body_json = $this->get_plugin_update_info();
         if (is_array($body_json)) {
             foreach ($body_json as $plugin_version) {
-
                 /* Skip older versions */
                 if (version_compare($plugin_version->name, $this->current_version) <= 0) {
+                    continue;
+                }
+
+                if (is_array($plugin_info)) {
+                    /* Update only changelog if other plugin info have been filled by a previous commit */
+                    $plugin_info['sections']['changelog'] .= $this->get_commit_info($plugin_version->commit->url, $plugin_version->commit->sha);
                     continue;
                 }
 
@@ -110,23 +132,21 @@ class WPUBaseUpdate {
                     $plugin_info['sections']['description'] = $plugin_data['Description'];
                 }
 
-                /* Get latest commit info */
-                $commit_info = $this->get_latest_commit_info($plugin_version->commit->url, $plugin_version->commit->sha);
-                if (is_object($commit_info) && isset($commit_info->commit->author->date)) {
-                    $plugin_info['last_updated'] = $commit_info->commit->author->date;
-                    $plugin_info['sections']['changelog'] = wpautop($commit_info->commit->message);
+                $plugin_info['sections']['changelog'] = $this->get_commit_info($plugin_version->commit->url, $plugin_version->commit->sha);
+
+                $_plugin_vars = array('tested', 'requires', 'homepage', 'donate_link', 'author_profile');
+                foreach ($_plugin_vars as $_plugin_var) {
+                    if (isset($this->details[$_plugin_var]) && $this->details[$_plugin_var]) {
+                        $plugin_info[$_plugin_var] = $this->details[$_plugin_var];
+                    }
                 }
 
                 /* Future info */
-                // $plugin_info['tested'] = "4.9";
-                // $plugin_info['requires'] = "4.9";
-                // $plugin_info['author_profile'] = 'https://profiles.wordpress.org/wordpressurl';
                 // $plugin_info['banners'] = array(
                 //     'low' => 'http://placehold.it/772x250',
                 //     'high' => 'http://placehold.it/1544x500'
                 // );
 
-                break;
             }
         }
 
@@ -162,13 +182,25 @@ class WPUBaseUpdate {
         return json_decode($plugin_update_body);
     }
 
-    private function get_latest_commit_info($commit, $sha) {
-        $transient_id = 'wpuimporttwitter_commit_' . $sha;
+    private function get_commit_info($commit, $sha) {
+        $transient_id = $this->github_project . '_commit_info_' . $sha . $this->current_version;
         if (false === ($commit_info = get_transient($transient_id))) {
             $commit_info = wp_remote_retrieve_body(wp_remote_get($commit));
             set_transient($transient_id, $commit_info, $this->transient_expiration);
         }
-        return json_decode($commit_info);
+        return $this->get_nice_commit_diff(json_decode($commit_info));
+    }
+
+    private function get_nice_commit_diff($commit_info) {
+        $info = '';
+        if (is_object($commit_info) && isset($commit_info->commit->author->date)) {
+            $commit_time = strtotime($commit_info->commit->author->date);
+            $info .= '<p>';
+            $info .= '<strong>' . date_i18n('Y-m-d H:i', $commit_time) . '</strong> / ';
+            $info .= nl2br($commit_info->commit->message);
+            $info .= '</p>';
+        }
+        return $info;
     }
 
     public function upgrader_post_install($true, $hook_extra, $result) {

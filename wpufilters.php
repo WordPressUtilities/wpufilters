@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.6.0
+Version: 0.6.1
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.6.0';
+    private $plugin_version = '0.6.1';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
     private $table_index = 'wpufilters_index';
@@ -32,6 +32,9 @@ class WPUFilters {
      * plugins_loaded filters
      */
     public function plugins_loaded() {
+
+        /* Translation */
+        load_plugin_textdomain('wpufilters', false, dirname(plugin_basename(__FILE__)) . '/lang/');
 
         /* Setup filters */
         $this->filters = $this->set_filters(apply_filters('wpufilters_filters', array()));
@@ -87,7 +90,7 @@ class WPUFilters {
             if (!isset($filter['values']) || !is_array($filter['values'])) {
                 $filter['values'] = array();
                 if ($filter['type'] == 'postmeta') {
-                    $filter['values'] = array(__('No'), __('Yes'));
+                    $filter['values'] = array(__('No', 'wpufilters'), __('Yes', 'wpufilters'));
                 }
                 if ($filter['type'] == 'tax') {
                     $terms = get_terms($key);
@@ -404,7 +407,8 @@ class WPUFilters {
         add_action('save_post', array(&$this, 'save_post'));
 
         /* - Clean at post deletion */
-        add_action('delete_post', array(&$this, 'delete_post'));
+        add_action('delete_post', array(&$this, 'deindex_post'));
+        add_action('trashed_post', array(&$this, 'deindex_post'));
     }
 
     public function reindexall_posts() {
@@ -601,9 +605,9 @@ class WPUFilters {
     ---------------------------------------------------------- */
 
     public function page_content__main() {
-        echo sprintf(__('<strong>Index status:</strong> %s/%s posts.'), $this->get_nb_indexed_posts(), $this->get_nb_posts());
+        echo sprintf(__('<strong>Index status:</strong> %s/%s posts.', 'wpufilters'), $this->get_nb_indexed_posts(), $this->get_nb_posts());
         echo '<hr />';
-        submit_button(__('Reindex all'), 'button', 'filter_action', true);
+        submit_button(__('Reindex all', 'wpufilters'), 'button', 'filter_action', true);
     }
 
     /* Get indexed posts */
