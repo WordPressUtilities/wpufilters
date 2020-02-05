@@ -4,7 +4,7 @@
 Plugin Name: WPU Filters
 Plugin URI: https://github.com/WordPressUtilities/wpufilters
 Description: Simple filters for WordPress
-Version: 0.6.1
+Version: 0.6.2
 Author: Darklg
 Author URI: http://darklg.me/
 License: MIT License
@@ -12,7 +12,7 @@ License URI: http://opensource.org/licenses/MIT
 */
 
 class WPUFilters {
-    private $plugin_version = '0.6.1';
+    private $plugin_version = '0.6.2';
     private $query_key = 'wpufilters_query';
     private $search_parameter = 'search';
     private $table_index = 'wpufilters_index';
@@ -38,8 +38,11 @@ class WPUFilters {
 
         /* Setup filters */
         $this->filters = $this->set_filters(apply_filters('wpufilters_filters', array()));
-        $this->post_type = apply_filters('wpufilters__post_type', $this->post_type);
+        $this->post_types = apply_filters('wpufilters__post_type', $this->post_types);
         $this->search_parameter = apply_filters('wpufilters_search_parameter', $this->search_parameter);
+        if($this->post_types && !is_array($this->post_types)){
+            $this->post_types = array($this->post_types);
+        }
 
         /* Hooks */
         if (!is_admin()) {
@@ -74,6 +77,9 @@ class WPUFilters {
             }
             if (!isset($filter['public_name'])) {
                 $filter['public_name'] = $filter['name'];
+            }
+            if (!isset($filter['index'])) {
+                $filter['index'] = 'default';
             }
             /* Set type */
             if (!isset($filter['type']) || !in_array($filter['type'], $this->filters_types)) {
@@ -234,7 +240,7 @@ class WPUFilters {
                 if (!$this->is_filter_active($filter_id, $value_id)) {
                     continue;
                 }
-                $qwhere[] = '(idx_key=' . $key . ' AND idx_value="' . esc_sql($value_id) . '")';
+                $qwhere[] = '(idx_key=' . $key . ' AND idx_value="' . esc_sql($value_id) . '" AND idx_name="' . esc_sql($filter['index']) . '")';
             }
             $key++;
         }
@@ -245,7 +251,7 @@ class WPUFilters {
 
         /* Get post ids with current query */
         $ids_posts = "SELECT DISTINCT post_id FROM " . $this->table_index . " WHERE " . implode(' OR ', $qwhere);
-        $active_values = "SELECT  DISTINCT  idx_key,idx_value FROM " . $this->table_index . " WHERE post_id IN(" . $ids_posts . ")";
+        $active_values = "SELECT DISTINCT idx_key,idx_value FROM " . $this->table_index . " WHERE post_id IN(" . $ids_posts . ")";
         $filled_filters = $wpdb->get_results($active_values, ARRAY_N);
         $filters_keys = array_keys($this->filters);
         foreach ($filled_filters as $key => $filter) {
@@ -264,10 +270,10 @@ class WPUFilters {
      */
     public function get_post_type() {
         global $wp_query;
-        if (!$this->post_type && is_object($wp_query) && is_array($wp_query->query) && isset($wp_query->query['post_type'])) {
+        if (is_object($wp_query) && is_array($wp_query->query) && isset($wp_query->query['post_type'])) {
             return $wp_query->query['post_type'];
         }
-        return $this->post_type;
+        return $this->post_types;
     }
 
     /**
@@ -345,7 +351,7 @@ class WPUFilters {
 
     public function setup_indexation() {
         /* Dont setup indexation for dynamic filters because too greedy */
-        if (!$this->post_type) {
+        if (!$this->post_types) {
             return false;
         }
         /* Create DB */
@@ -361,7 +367,11 @@ class WPUFilters {
             'idx_value' => array(
                 'public_name' => 'Value',
                 'sql' => 'TEXT'
-            )
+            ),
+            'idx_name' => array(
+                'public_name' => 'Name',
+                'sql' => 'TEXT'
+            ),
         );
         include dirname(__FILE__) . '/inc/WPUBaseAdminDatas/WPUBaseAdminDatas.php';
         $this->baseadmindatas = new \wpufilters\WPUBaseAdminDatas();
@@ -416,7 +426,7 @@ class WPUFilters {
         $ids = get_posts(array(
             'posts_per_page' => -1,
             'fields' => 'ids',
-            'post_type' => $this->post_type
+            'post_type' => $this->post_types
         ));
         foreach ($ids as $post_id) {
             $this->index_post($post_id);
@@ -451,13 +461,13 @@ class WPUFilters {
                 $terms = wp_get_post_terms($post_id, $filter_id);
                 if (is_array($terms)) {
                     foreach ($terms as $term) {
-                        $values[] = array($key, $term->slug);
+                        $values[] = array($key, $term->slug, $filter['index']);
                     }
                 }
             } else {
                 $meta_value = get_post_meta($post_id, $filter_id, 1);
                 if ($meta_value) {
-                    $values[] = array($key, $meta_value);
+                    $values[] = array($key, $meta_value, $filter['index']);
                 }
             }
             $key++;
@@ -473,11 +483,13 @@ class WPUFilters {
                 array(
                     'post_id' => $post_id,
                     'idx_key' => $value[0],
-                    'idx_value' => $value[1]
+                    'idx_value' => $value[1],
+                    'idx_name' => $value[2]
                 ),
                 array(
                     '%d',
                     '%d',
+                    '%s',
                     '%s'
                 )
             );
@@ -622,7 +634,7 @@ class WPUFilters {
     public function get_nb_posts() {
         $posts = get_posts(array(
             'fields' => 'ids',
-            'post_type' => $this->post_type,
+            'post_type' => $this->post_types,
             'posts_per_page' => -1
         ));
         $nb_posts = count($posts);

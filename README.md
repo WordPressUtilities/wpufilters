@@ -60,10 +60,11 @@ if (is_object($WPUFilters)) {
 
 - [x] Clean index at post deletion
 - [x] Page reindex
-- [ ] French translation
+- [x] French translation
 - [ ] Delete index on filters changes
 - [ ] Select instead of radiobox
 - [ ] Action WP CLI ?
 - [ ] Do not recreate unchanged values when reindexing post
 - [ ] Coherent results option.
 - [ ] Preview result counter.
+- [ ] Handle various indexes with post_types
